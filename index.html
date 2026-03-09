@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Slideshow</title>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  /* ── RESET & BASE ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --gold:    #c9a96e;
+    --gold-dim:#7a5f35;
+    --bg:      #0a0a0a;
+    --surface: #141414;
+    --border:  #2a2a2a;
+    --text:    #e8e0d4;
+    --muted:   #6b6358;
+    --danger:  #c0392b;
+    --radius:  12px;
+    --font-display: 'Cormorant Garamond', Georgia, serif;
+    --font-body:    'DM Sans', sans-serif;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* ── SCREENS ──────────────────────────────────────────────── */
+  .screen {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .4s ease;
+  }
+  .screen.hidden { opacity: 0; pointer-events: none; }
+
+  /* ── LOGIN SCREEN ─────────────────────────────────────────── */
+  #screen-login {
+    background: radial-gradient(ellipse at 30% 40%, #1a1408 0%, var(--bg) 65%);
+    flex-direction: column;
+    gap: 0;
+  }
+  .login-card {
+    width: min(440px, 92vw);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 48px 40px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    box-shadow: 0 32px 80px rgba(0,0,0,.7);
+  }
+  .login-header { text-align: center; }
+  .login-logo {
+    width: 52px; height: 52px;
+    margin: 0 auto 18px;
+    background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+  }
+  .login-title {
+    font-family: var(--font-display);
+    font-size: 28px; font-weight: 300;
+    letter-spacing: .04em;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .login-sub {
+    font-size: 13px; color: var(--muted);
+    letter-spacing: .02em;
+  }
+
+  /* interval control */
+  .field-label {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 8px;
+  }
+  .interval-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .interval-btn {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--border); border: none; color: var(--text);
+    font-size: 20px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  .interval-btn:hover { background: var(--gold-dim); }
+  .interval-val {
+    flex: 1; text-align: center;
+    font-family: var(--font-display); font-size: 22px; font-weight: 300;
+    color: var(--gold);
+  }
+
+  /* buttons */
+  .btn-primary {
+    width: 100%; padding: 15px;
+    background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+    border: none; border-radius: var(--radius);
+    color: #0a0a0a; font-family: var(--font-body); font-size: 15px; font-weight: 400;
+    letter-spacing: .06em; text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+  }
+  .btn-primary:active { transform: scale(.98); opacity: .9; }
+  .btn-secondary {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--radius);
+    padding: 12px 20px; cursor: pointer; font-family: var(--font-body);
+    font-size: 14px; transition: border-color .2s;
+  }
+  .btn-secondary:hover { border-color: var(--gold-dim); }
+
+  /* ── CATEGORY SCREEN ──────────────────────────────────────── */
+  #screen-category {
+    flex-direction: column; gap: 24px;
+    background: radial-gradient(ellipse at 60% 30%, #1a1408 0%, var(--bg) 70%);
+    padding: 24px;
+  }
+  .cat-title {
+    font-family: var(--font-display); font-size: 26px; font-weight: 300;
+    letter-spacing: .05em; text-align: center; color: var(--text);
+  }
+  .cat-grid {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    justify-content: center; max-width: 480px;
+  }
+  .cat-chip {
+    padding: 10px 22px; border-radius: 100px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-size: 14px; cursor: pointer;
+    transition: all .2s;
+  }
+  .cat-chip:hover, .cat-chip.active {
+    border-color: var(--gold); background: rgba(201,169,110,.12); color: var(--gold);
+  }
+  .cat-chip.all-chip {
+    border-color: var(--gold-dim); color: var(--gold);
+  }
+  .status-msg {
+    font-size: 13px; color: var(--muted); text-align: center; min-height: 18px;
+  }
+  .status-msg.error { color: #e07070; }
+
+  /* ── SLIDESHOW SCREEN ─────────────────────────────────────── */
+  #screen-slide {
+    background: #000;
+    flex-direction: column;
+    cursor: pointer;
+  }
+
+  /* background blur layer */
+  #slide-bg {
+    position: absolute; inset: -20px;
+    background-size: cover; background-position: center;
+    filter: blur(22px) brightness(.35) saturate(1.3);
+    transition: background-image .8s ease;
+    z-index: 0;
+  }
+
+  /* main image */
+  #slide-img {
+    position: relative; z-index: 1;
+    max-width: 100%; max-height: 100vh;
+    object-fit: contain;
+    opacity: 0;
+    transition: opacity .7s ease;
+    display: block;
+    margin: auto;
+  }
+  #slide-img.visible { opacity: 1; }
+
+  /* progress bar */
+  #progress-bar-wrap {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 3px; background: rgba(255,255,255,.08); z-index: 10;
+  }
+  #progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+    width: 0%; transition: width linear;
+  }
+
+  /* HUD overlay — tap to show/hide */
+  #hud {
+    position: absolute; inset: 0; z-index: 20;
+    display: flex; flex-direction: column;
+    justify-content: space-between; pointer-events: none;
+    opacity: 0; transition: opacity .3s;
+  }
+  #hud.visible { opacity: 1; pointer-events: auto; }
+
+  .hud-top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 18px 20px;
+    background: linear-gradient(to bottom, rgba(0,0,0,.7) 0%, transparent 100%);
+  }
+  .hud-title {
+    font-family: var(--font-display); font-size: 20px; font-weight: 300;
+    color: #fff; letter-spacing: .04em;
+    text-shadow: 0 1px 8px rgba(0,0,0,.8);
+    max-width: 70%; word-break: break-word;
+  }
+  .hud-counter {
+    font-size: 12px; color: rgba(255,255,255,.5); letter-spacing: .1em;
+    text-align: right;
+    text-shadow: 0 1px 4px rgba(0,0,0,.8);
+  }
+  .hud-bottom {
+    padding: 16px 20px 24px;
+    background: linear-gradient(to top, rgba(0,0,0,.7) 0%, transparent 100%);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .hud-cat-badge {
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--gold); padding: 5px 12px;
+    border: 1px solid rgba(201,169,110,.4); border-radius: 100px;
+    background: rgba(201,169,110,.08);
+  }
+  .hud-controls { display: flex; gap: 10px; align-items: center; }
+  .hud-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(255,255,255,.12); border: none; color: #fff;
+    font-size: 18px; cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+    transition: background .15s;
+  }
+  .hud-btn:hover { background: rgba(255,255,255,.22); }
+  .hud-btn.pause-btn { font-size: 14px; }
+
+  /* ── SETTINGS PANEL ───────────────────────────────────────── */
+  #settings-panel {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,.75); backdrop-filter: blur(6px);
+    display: flex; align-items: flex-end; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+  }
+  #settings-panel.open { opacity: 1; pointer-events: auto; }
+  .settings-sheet {
+    width: min(500px, 100%); background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    padding: 28px 28px 36px;
+    display: flex; flex-direction: column; gap: 22px;
+    transform: translateY(20px); transition: transform .3s ease;
+  }
+  #settings-panel.open .settings-sheet { transform: translateY(0); }
+  .settings-title {
+    font-family: var(--font-display); font-size: 22px; font-weight: 300;
+    letter-spacing: .04em;
+  }
+  .settings-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .settings-label { font-size: 14px; color: var(--muted); }
+  .settings-actions { display: flex; gap: 10px; }
+
+  /* ── LOADING OVERLAY ──────────────────────────────────────── */
+  #loading {
+    position: fixed; inset: 0; z-index: 100;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+  }
+  #loading.show { opacity: 1; pointer-events: auto; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 2px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-msg { font-size: 13px; color: var(--muted); }
+
+  /* ── TOAST ────────────────────────────────────────────────── */
+  #toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(60px);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 100px; padding: 10px 22px;
+    font-size: 13px; color: var(--text);
+    transition: transform .3s ease, opacity .3s;
+    z-index: 200; opacity: 0; white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  #toast.error { border-color: var(--danger); color: #e07070; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     ▶  CONFIGURATION — fill these in before deploying
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+const CONFIG = {
+  // Azure AD app registration (must have Sites.Read.All delegated permission)
+  tenantId:   "0647a3cf-4b3e-4895-8a36-c75cb0b0b122",          // e.g. "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  clientId:   "5989873b-5a47-473f-bb58-39aa4126d414",          // e.g. "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+  redirectUri: window.location.origin + window.location.pathname,
+
+  // SharePoint
+  siteUrl:        "https://kinmundyfirst.sharepoint.com/sites/Media",
+  listName:       "Sermon Image Archive",        // internal (not display) name
+  imageColumn:    "Thumbnail",                  // internal column name, e.g. "Image0" or "Image"
+  categoryColumn: "SlideshowName",              // internal column name, e.g. "Category"
+  titleColumn:    "",                                 // set to a column name to show captions, or "" for none
+
+  // UX defaults
+  defaultIntervalSec: 60,   // seconds per slide
+  minIntervalSec:      5,
+  maxIntervalSec:    300,
+  intervalStepSec:     5,
+};
+</script>
+<!-- ══════════════════════════════════════════════════════════ -->
+
+<!-- LOADING OVERLAY -->
+<div id="loading"><div class="spinner"></div><div class="loading-msg" id="loading-msg">Loading…</div></div>
+
+<!-- TOAST -->
+<div id="toast" id="toast"></div>
+
+<!-- ── SCREEN: LOGIN ────────────────────────────────────────── -->
+<div class="screen" id="screen-login">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="login-logo">🖼</div>
+      <div class="login-title">Slideshow</div>
+      <div class="login-sub">Sign in with Microsoft 365 to begin</div>
+    </div>
+
+    <div>
+      <div class="field-label">Slide interval</div>
+      <div class="interval-row">
+        <button class="interval-btn" id="interval-down">−</button>
+        <div class="interval-val" id="interval-display">60 sec</div>
+        <button class="interval-btn" id="interval-up">+</button>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="btn-login">Sign in with Microsoft</button>
+    <div class="status-msg" id="login-status"></div>
+  </div>
+</div>
+
+<!-- ── SCREEN: CATEGORY SELECT ──────────────────────────────── -->
+<div class="screen hidden" id="screen-category">
+  <div class="cat-title">Choose a category</div>
+  <div class="cat-grid" id="cat-grid">
+    <button class="cat-chip all-chip" data-cat="__ALL__">All images</button>
+  </div>
+  <div class="status-msg" id="cat-status">Fetching categories…</div>
+</div>
+
+<!-- ── SCREEN: SLIDESHOW ─────────────────────────────────────── -->
+<div class="screen hidden" id="screen-slide">
+  <div id="slide-bg"></div>
+  <img id="slide-img" src="" alt="" />
+
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+
+  <!-- tap overlay — toggles HUD -->
+  <div id="hud">
+    <div class="hud-top">
+      <div class="hud-title" id="hud-title"></div>
+      <div class="hud-counter" id="hud-counter"></div>
+    </div>
+    <div class="hud-bottom">
+      <div class="hud-cat-badge" id="hud-cat-badge"></div>
+      <div class="hud-controls">
+        <button class="hud-btn" id="btn-prev" title="Previous">‹</button>
+        <button class="hud-btn pause-btn" id="btn-pause" title="Pause">⏸</button>
+        <button class="hud-btn" id="btn-next" title="Next">›</button>
+        <button class="hud-btn" id="btn-settings" title="Settings">⚙</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SETTINGS PANEL ─────────────────────────────────────────── -->
+<div id="settings-panel">
+  <div class="settings-sheet">
+    <div class="settings-title">Settings</div>
+
+    <div class="settings-row">
+      <span class="settings-label">Slide interval</span>
+      <div class="interval-row" style="gap:8px">
+        <button class="interval-btn" id="s-interval-down">−</button>
+        <div class="interval-val" id="s-interval-display" style="font-size:18px;min-width:70px">60 sec</div>
+        <button class="interval-btn" id="s-interval-up">+</button>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <span class="settings-label">Category</span>
+      <div class="settings-actions">
+        <button class="btn-secondary" id="btn-change-cat">Change…</button>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <span class="settings-label">Account</span>
+      <div class="settings-actions">
+        <button class="btn-secondary" id="btn-refresh">↻ Refresh</button>
+        <button class="btn-secondary" id="btn-logout" style="border-color:#c0392b;color:#e07070">Sign out</button>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="btn-settings-close">Done</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<script>
+"use strict";
+
+/* ── MSAL SETUP ─────────────────────────────────────────────── */
+const msalConfig = {
+  auth: {
+    clientId: CONFIG.clientId,
+    authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
+    redirectUri: CONFIG.redirectUri,
+  },
+  cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false }
+};
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+const SCOPES = ["https://graph.microsoft.com/Sites.Read.All"];
+
+/* ── STATE ──────────────────────────────────────────────────── */
+const state = {
+  intervalSec:    CONFIG.defaultIntervalSec,
+  slides:         [],  // { imageUrl, title, category }
+  currentIndex:   0,
+  paused:         false,
+  hudVisible:     false,
+  selectedCat:    "__ALL__",
+  siteId:         null,
+  listId:         null,
+  timer:          null,
+  progressTimer:  null,
+};
+
+/* ── UTILITIES ──────────────────────────────────────────────── */
+const $  = id => document.getElementById(id);
+const show  = id => $('screen-'+id).classList.remove('hidden');
+const hide  = id => $('screen-'+id).classList.add('hidden');
+
+function showLoading(msg="Loading…") {
+  $('loading-msg').textContent = msg;
+  $('loading').classList.add('show');
+}
+function hideLoading() { $('loading').classList.remove('show'); }
+
+let toastTimer;
+function toast(msg, isError=false) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.toggle('error', isError);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function fmtInterval(s) {
+  if (s < 60) return `${s} sec`;
+  const m = s/60; return Number.isInteger(m) ? `${m} min` : `${m.toFixed(1)} min`;
+}
+function updateIntervalDisplays() {
+  $('interval-display').textContent    = fmtInterval(state.intervalSec);
+  $('s-interval-display').textContent  = fmtInterval(state.intervalSec);
+}
+
+/* ── AUTH ───────────────────────────────────────────────────── */
+async function getToken() {
+  const accounts = msalInstance.getAllAccounts();
+  if (!accounts.length) throw new Error("Not signed in");
+  try {
+    const res = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: accounts[0] });
+    return res.accessToken;
+  } catch {
+    const res = await msalInstance.acquireTokenPopup({ scopes: SCOPES });
+    return res.accessToken;
+  }
+}
+
+/* ── GRAPH API HELPERS ──────────────────────────────────────── */
+async function graphGet(url) {
+  const token = await getToken();
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function getSiteId() {
+  if (state.siteId) return state.siteId;
+  const u = new URL(CONFIG.siteUrl);
+  const hostname = u.hostname;
+  const path = u.pathname.replace(/^\//, '');
+  const data = await graphGet(`https://graph.microsoft.com/v1.0/sites/${hostname}:/${path}`);
+  state.siteId = data.id;
+  return state.siteId;
+}
+
+async function getListId() {
+  if (state.listId) return state.listId;
+  const siteId = await getSiteId();
+  // Graph API doesn't support $filter on /lists, so fetch all and match client-side
+  const data = await graphGet(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/lists`
+  );
+  const list = data.value?.find(
+    l => l.name === CONFIG.listName || l.displayName === CONFIG.listName
+  );
+  if (!list) throw new Error(`List "${CONFIG.listName}" not found`);
+  state.listId = list.id;
+  return state.listId;
+}
+
+async function fetchItems(category) {
+  const siteId = await getSiteId();
+  const listId = await getListId();
+
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?$expand=fields&$top=999`;
+
+  if (category && category !== "__ALL__") {
+    url += `&$filter=fields/${CONFIG.categoryColumn} eq '${category.replace(/'/g, "''")}'`;
+  }
+
+  const all = [];
+  while (url) {
+    const data = await graphGet(url);
+    all.push(...(data.value || []));
+    url = data['@odata.nextLink'] || null;
+  }
+  return all;
+}
+
+function parseImageUrl(raw) {
+  if (!raw) return null;
+  // Built-in Image column returns a JSON string
+  try {
+    const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (obj.serverRelativeUrl) {
+      const base = obj.serverUrl || new URL(CONFIG.siteUrl).origin;
+      return base + obj.serverRelativeUrl;
+    }
+    if (obj.downloadUrl) return obj.downloadUrl;
+    // Sometimes it's already a URL string inside a nested property
+    if (obj.Url) return obj.Url;
+  } catch {}
+  // If it was already a plain URL string
+  if (typeof raw === 'string' && raw.startsWith('http')) return raw;
+  return null;
+}
+
+/* ── CATEGORIES ─────────────────────────────────────────────── */
+async function loadCategories() {
+  showLoading("Fetching categories…");
+  try {
+    const items = await fetchItems("__ALL__");
+    const cats = [...new Set(
+      items.map(i => i.fields?.[CONFIG.categoryColumn]).filter(Boolean)
+    )].sort();
+
+    const grid = $('cat-grid');
+    // Keep the "All" button, add category chips
+    cats.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'cat-chip';
+      btn.dataset.cat = cat;
+      btn.textContent = cat;
+      btn.addEventListener('click', () => selectCategory(cat));
+      grid.appendChild(btn);
+    });
+
+    $('cat-status').textContent = cats.length
+      ? `${cats.length} categor${cats.length===1?'y':'ies'} found`
+      : "No categories found — showing all images";
+
+    if (!cats.length) {
+      // Skip category screen, go straight to slideshow
+      await startSlideshow("__ALL__");
+    }
+  } catch(e) {
+    $('cat-status').textContent = e.message;
+    $('cat-status').classList.add('error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function selectCategory(cat) {
+  state.selectedCat = cat;
+  await startSlideshow(cat);
+}
+
+/* ── SLIDESHOW ──────────────────────────────────────────────── */
+async function startSlideshow(category) {
+  showLoading("Loading images…");
+  try {
+    const items = await fetchItems(category);
+    const slides = items
+      .map(i => ({
+        imageUrl: parseImageUrl(i.fields?.[CONFIG.imageColumn]),
+        title:    i.fields?.[CONFIG.titleColumn] || '',
+        category: i.fields?.[CONFIG.categoryColumn] || '',
+      }))
+      .filter(s => s.imageUrl);
+
+    // DEBUG — remove after confirming field names/formats
+    console.log("Raw items sample:", items.slice(0, 3).map(i => i.fields));
+
+    if (!slides.length) {
+      toast("No images found for that category.", true);
+      hideLoading();
+      return;
+    }
+
+    // Shuffle
+    for (let i = slides.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [slides[i], slides[j]] = [slides[j], slides[i]];
+    }
+
+    state.slides = slides;
+    state.currentIndex = 0;
+    state.paused = false;
+
+    hide('login'); hide('category');
+    show('slide');
+    hideLoading();
+
+    renderSlide(0);
+    scheduleNext();
+
+    const label = category === "__ALL__" ? "All images" : category;
+    $('hud-cat-badge').textContent = label;
+  } catch(e) {
+    toast("Error loading images: " + e.message, true);
+    hideLoading();
+  }
+}
+
+function renderSlide(idx) {
+  const img = $('slide-img');
+  const bg  = $('slide-bg');
+  const s   = state.slides[idx];
+  if (!s) return;
+
+  img.classList.remove('visible');
+  setTimeout(() => {
+    img.src = s.imageUrl;
+    bg.style.backgroundImage = `url('${s.imageUrl}')`;
+    img.onload = () => img.classList.add('visible');
+    img.onerror = () => { img.src = ''; goNext(); };
+  }, 200);
+
+  $('hud-title').textContent   = s.title;
+  $('hud-counter').textContent = `${idx + 1} / ${state.slides.length}`;
+}
+
+function scheduleNext() {
+  clearTimeout(state.timer);
+  clearInterval(state.progressTimer);
+
+  if (state.paused) return;
+
+  // Animate progress bar
+  const bar = $('progress-bar');
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    bar.style.transition = `width ${state.intervalSec}s linear`;
+    bar.style.width = '100%';
+  }));
+
+  state.timer = setTimeout(goNext, state.intervalSec * 1000);
+}
+
+function goNext() {
+  state.currentIndex = (state.currentIndex + 1) % state.slides.length;
+  renderSlide(state.currentIndex);
+  scheduleNext();
+}
+function goPrev() {
+  state.currentIndex = (state.currentIndex - 1 + state.slides.length) % state.slides.length;
+  renderSlide(state.currentIndex);
+  scheduleNext();
+}
+
+/* ── HUD TOGGLE ─────────────────────────────────────────────── */
+let hudTimer;
+function toggleHud() {
+  const hud = $('hud');
+  if (hud.classList.contains('visible')) {
+    hud.classList.remove('visible');
+  } else {
+    hud.classList.add('visible');
+    clearTimeout(hudTimer);
+    hudTimer = setTimeout(() => hud.classList.remove('visible'), 4000);
+  }
+}
+
+/* ── PAUSE / RESUME ─────────────────────────────────────────── */
+function togglePause() {
+  state.paused = !state.paused;
+  $('btn-pause').textContent = state.paused ? '▶' : '⏸';
+  const bar = $('progress-bar');
+  if (state.paused) {
+    clearTimeout(state.timer);
+    bar.style.transition = 'none';
+  } else {
+    scheduleNext();
+  }
+}
+
+/* ── EVENT WIRING ────────────────────────────────────────────── */
+// Interval controls (login screen)
+$('interval-down').addEventListener('click', () => {
+  state.intervalSec = Math.max(CONFIG.minIntervalSec, state.intervalSec - CONFIG.intervalStepSec);
+  updateIntervalDisplays();
+});
+$('interval-up').addEventListener('click', () => {
+  state.intervalSec = Math.min(CONFIG.maxIntervalSec, state.intervalSec + CONFIG.intervalStepSec);
+  updateIntervalDisplays();
+});
+
+// Interval controls (settings)
+$('s-interval-down').addEventListener('click', () => {
+  state.intervalSec = Math.max(CONFIG.minIntervalSec, state.intervalSec - CONFIG.intervalStepSec);
+  updateIntervalDisplays(); scheduleNext();
+});
+$('s-interval-up').addEventListener('click', () => {
+  state.intervalSec = Math.min(CONFIG.maxIntervalSec, state.intervalSec + CONFIG.intervalStepSec);
+  updateIntervalDisplays(); scheduleNext();
+});
+
+// Login
+$('btn-login').addEventListener('click', async () => {
+  $('login-status').textContent = '';
+  $('login-status').classList.remove('error');
+  try {
+    await msalInstance.loginPopup({ scopes: SCOPES });
+    hide('login'); show('category');
+    await loadCategories();
+  } catch(e) {
+    $('login-status').textContent = e.message || "Sign-in failed";
+    $('login-status').classList.add('error');
+  }
+});
+
+// Category chips (dynamically added, handled in loadCategories)
+$('cat-grid').querySelector('[data-cat="__ALL__"]')
+  .addEventListener('click', () => selectCategory("__ALL__"));
+
+// Slide screen tap → toggle HUD
+$('screen-slide').addEventListener('click', e => {
+  // Don't toggle if a HUD button was tapped
+  if (e.target.closest('#hud')) return;
+  toggleHud();
+});
+
+// HUD buttons
+$('btn-prev').addEventListener('click', e => { e.stopPropagation(); goPrev(); });
+$('btn-next').addEventListener('click', e => { e.stopPropagation(); goNext(); });
+$('btn-pause').addEventListener('click', e => { e.stopPropagation(); togglePause(); });
+$('btn-settings').addEventListener('click', e => {
+  e.stopPropagation();
+  $('settings-panel').classList.add('open');
+});
+
+// Settings panel
+$('btn-settings-close').addEventListener('click', () => $('settings-panel').classList.remove('open'));
+$('settings-panel').addEventListener('click', e => {
+  if (e.target === $('settings-panel')) $('settings-panel').classList.remove('open');
+});
+$('btn-change-cat').addEventListener('click', () => {
+  $('settings-panel').classList.remove('open');
+  clearTimeout(state.timer);
+  $('progress-bar').style.width = '0%';
+  hide('slide'); show('category');
+});
+$('btn-refresh').addEventListener('click', async () => {
+  $('settings-panel').classList.remove('open');
+  await startSlideshow(state.selectedCat);
+});
+$('btn-logout').addEventListener('click', () => {
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length) msalInstance.logoutPopup({ account: accounts[0] });
+  hide('slide'); show('login');
+  $('settings-panel').classList.remove('open');
+  clearTimeout(state.timer);
+});
+
+/* ── HANDLE REDIRECT / SILENT SSO ───────────────────────────── */
+(async () => {
+  showLoading("Starting…");
+  await msalInstance.initialize();
+  try {
+    await msalInstance.handleRedirectPromise();
+  } catch {}
+
+  const accounts = msalInstance.getAllAccounts();
+  hideLoading();
+  if (accounts.length) {
+    // Already signed in from a previous session
+    hide('login'); show('category');
+    await loadCategories();
+  } else {
+    show('login');
+  }
+  updateIntervalDisplays();
+})();
+</script>
+</body>
+</html>
