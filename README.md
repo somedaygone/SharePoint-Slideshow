@@ -2,6 +2,9 @@
 
 A self-contained, single-file web app that authenticates with Microsoft 365 and displays images from a SharePoint list as a full-screen slideshow. Built for kiosk or presentation use cases where images are managed in SharePoint.
 
+## Development
+This project was built with the assistance of [Claude](https://claude.ai) by Anthropic.
+
 ## How It Works
 
 1. The user opens the page and signs in with their Microsoft 365 account.
