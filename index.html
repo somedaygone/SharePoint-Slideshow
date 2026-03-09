@@ -285,6 +285,86 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-msg { font-size: 13px; color: var(--muted); }
 
+  /* ── PRESET CHIPS ─────────────────────────────────────────── */
+  .preset-chips {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .preset-chip {
+    flex: 1;
+    padding: 8px 4px;
+    border-radius: 100px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: center;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: border-color .15s, background .15s, color .15s;
+  }
+  .preset-chip.active {
+    border-color: var(--gold);
+    background: rgba(201,169,110,.12);
+    color: var(--gold);
+  }
+  @keyframes chip-hold {
+    0%   { transform: scale(1);   border-color: var(--border); }
+    100% { transform: scale(.96); border-color: var(--gold); }
+  }
+  .preset-chip.pressing { animation: chip-hold .5s ease-out forwards; }
+
+  /* ── CHIP EDIT POPOVER ─────────────────────────────────────── */
+  #chip-edit-popover {
+    position: fixed;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 300;
+    box-shadow: 0 8px 32px rgba(0,0,0,.6);
+    min-width: 220px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s, transform .15s;
+    transform: scale(.95);
+    transform-origin: bottom left;
+  }
+  #chip-edit-popover.open { opacity: 1; pointer-events: auto; transform: scale(1); }
+  .popover-row { display: flex; gap: 8px; }
+  .popover-input {
+    flex: 1; min-width: 0;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: var(--font-body); font-size: 15px;
+    padding: 8px 10px; text-align: center;
+  }
+  .popover-input:focus { outline: none; border-color: var(--gold-dim); }
+  .popover-unit {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: var(--font-body); font-size: 13px;
+    padding: 8px; cursor: pointer;
+  }
+  .popover-unit:focus { outline: none; border-color: var(--gold-dim); }
+  .popover-actions { display: flex; gap: 8px; }
+  .popover-save {
+    flex: 1; padding: 9px;
+    background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+    border: none; border-radius: 8px;
+    color: #0a0a0a; font-family: var(--font-body); font-size: 14px; cursor: pointer;
+  }
+  .popover-cancel {
+    flex: 1; padding: 9px;
+    background: transparent; border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: var(--font-body); font-size: 14px; cursor: pointer;
+  }
+  .popover-cancel:hover { border-color: var(--gold-dim); }
+
   /* ── TOAST ────────────────────────────────────────────────── */
   #toast {
     position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(60px);
@@ -296,6 +376,32 @@
   }
   #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
   #toast.error { border-color: var(--danger); color: #e07070; }
+
+  /* ── ORDER TOGGLE ─────────────────────────────────────────── */
+  .order-toggle {
+    display: flex;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .order-btn {
+    padding: 6px 16px;
+    border-radius: 100px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .order-btn.active {
+    border-color: var(--gold);
+    background: rgba(201,169,110,.12);
+    color: var(--gold);
+  }
 </style>
 </head>
 <body>
@@ -320,8 +426,12 @@ const CONFIG = {
   // UX defaults
   defaultIntervalSec: 60,   // seconds per slide
   minIntervalSec:      5,
-  maxIntervalSec:    300,
+  maxIntervalSec:   3600,
   intervalStepSec:     5,
+
+  // Sort columns (internal SharePoint field names — do not change)
+  sortColumn1: "Date",           // primary sort key, descending
+  sortColumn2: "Slide_x0023_",   // secondary sort key, ascending
 };
 </script>
 <!-- ══════════════════════════════════════════════════════════ -->
@@ -331,6 +441,22 @@ const CONFIG = {
 
 <!-- TOAST -->
 <div id="toast" id="toast"></div>
+
+<!-- CHIP EDIT POPOVER -->
+<div id="chip-edit-popover">
+  <div class="popover-row">
+    <input type="number" id="popover-val" class="popover-input" min="1" max="3600">
+    <select id="popover-unit" class="popover-unit">
+      <option value="1">Seconds</option>
+      <option value="60">Minutes</option>
+      <option value="3600">Hours</option>
+    </select>
+  </div>
+  <div class="popover-actions">
+    <button class="popover-save" id="popover-save">Save</button>
+    <button class="popover-cancel" id="popover-cancel">Cancel</button>
+  </div>
+</div>
 
 <!-- ── SCREEN: LOGIN ────────────────────────────────────────── -->
 <div class="screen" id="screen-login">
@@ -343,11 +469,7 @@ const CONFIG = {
 
     <div>
       <div class="field-label">Slide interval</div>
-      <div class="interval-row">
-        <button class="interval-btn" id="interval-down">−</button>
-        <div class="interval-val" id="interval-display">60 sec</div>
-        <button class="interval-btn" id="interval-up">+</button>
-      </div>
+      <div id="login-interval-control"></div>
     </div>
 
     <button class="btn-primary" id="btn-login">Sign in with Microsoft</button>
@@ -394,12 +516,16 @@ const CONFIG = {
   <div class="settings-sheet">
     <div class="settings-title">Settings</div>
 
+    <div>
+      <div class="settings-label" style="margin-bottom:10px">Slide interval</div>
+      <div id="settings-interval-control"></div>
+    </div>
+
     <div class="settings-row">
-      <span class="settings-label">Slide interval</span>
-      <div class="interval-row" style="gap:8px">
-        <button class="interval-btn" id="s-interval-down">−</button>
-        <div class="interval-val" id="s-interval-display" style="font-size:18px;min-width:70px">60 sec</div>
-        <button class="interval-btn" id="s-interval-up">+</button>
+      <span class="settings-label">Order</span>
+      <div class="order-toggle" id="order-toggle">
+        <button class="order-btn" data-order="sorted">Sorted</button>
+        <button class="order-btn" data-order="random">Random</button>
       </div>
     </div>
 
@@ -440,13 +566,16 @@ const msalInstance = new msal.PublicClientApplication(msalConfig);
 const SCOPES = ["https://graph.microsoft.com/Sites.Read.All"];
 
 /* ── STATE ──────────────────────────────────────────────────── */
+const ORDER_KEY = 'slideshow_order';
+
 const state = {
   intervalSec:    CONFIG.defaultIntervalSec,
-  slides:         [],  // { imageUrl, title, category }
+  slides:         [],  // { imageUrl, title, category, date, slideNum }
   currentIndex:   0,
   paused:         false,
   hudVisible:     false,
   selectedCat:    "__ALL__",
+  orderMode:      localStorage.getItem(ORDER_KEY) || 'sorted',
   siteId:         null,
   listId:         null,
   timer:          null,
@@ -476,11 +605,199 @@ function toast(msg, isError=false) {
 
 function fmtInterval(s) {
   if (s < 60) return `${s} sec`;
-  const m = s/60; return Number.isInteger(m) ? `${m} min` : `${m.toFixed(1)} min`;
+  if (s < 3600) { const m = s/60; return Number.isInteger(m) ? `${m} min` : `${m.toFixed(1)} min`; }
+  const h = s/3600; return Number.isInteger(h) ? `${h} hr` : `${h.toFixed(1)} hr`;
 }
-function updateIntervalDisplays() {
-  $('interval-display').textContent    = fmtInterval(state.intervalSec);
-  $('s-interval-display').textContent  = fmtInterval(state.intervalSec);
+
+/* ── SLIDE ORDER ─────────────────────────────────────────── */
+function shuffleSlides(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function sortSlides(arr) {
+  arr.sort((a, b) => {
+    if (a.date < b.date) return 1;
+    if (a.date > b.date) return -1;
+    return (a.slideNum || 0) - (b.slideNum || 0);
+  });
+}
+
+function updateOrderToggleUI() {
+  document.querySelectorAll('.order-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.order === state.orderMode);
+  });
+}
+
+function setOrderMode(mode) {
+  state.orderMode = mode;
+  localStorage.setItem(ORDER_KEY, mode);
+  updateOrderToggleUI();
+  if (!state.slides.length) return;
+  if (mode === 'random') {
+    shuffleSlides(state.slides);
+  } else {
+    sortSlides(state.slides);
+  }
+  state.currentIndex = 0;
+  renderSlide(0);
+  scheduleNext();
+}
+
+/* ── PRESETS ─────────────────────────────────────────────── */
+const DEFAULT_PRESETS = [5, 10, 60, 300, 3600];
+const PRESETS_KEY = 'slideshow_presets';
+
+function loadPresets() {
+  try {
+    const raw = localStorage.getItem(PRESETS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length === 5 && arr.every(n => Number.isInteger(n) && n >= 1))
+        return arr;
+    }
+  } catch {}
+  return [...DEFAULT_PRESETS];
+}
+
+let presets = loadPresets();
+const _intervalControls = [];
+
+function syncAllIntervalControls() {
+  _intervalControls.forEach(c => { c.updateDisplay(); c.syncChips(); });
+}
+
+function applyPreset(index) {
+  state.intervalSec = presets[index];
+  syncAllIntervalControls();
+  if (state.slides.length) scheduleNext();
+}
+
+/* ── CHIP LONG-PRESS ─────────────────────────────────────── */
+let _editIndex = null;
+
+function openChipEditor(chip, index) {
+  _editIndex = index;
+  const sec = presets[index];
+  let val, unit;
+  if (sec >= 3600 && sec % 3600 === 0) { val = sec / 3600; unit = '3600'; }
+  else if (sec >= 60 && sec % 60 === 0) { val = sec / 60;   unit = '60';   }
+  else                                  { val = sec;         unit = '1';    }
+
+  $('popover-val').value  = val;
+  $('popover-unit').value = unit;
+
+  const popover = $('chip-edit-popover');
+  const rect    = chip.getBoundingClientRect();
+  const popW    = popover.offsetWidth  || 220;
+  const popH    = popover.offsetHeight || 110;
+
+  let left = rect.left;
+  let top  = rect.top - popH - 8;
+  if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+  if (left < 8) left = 8;
+  if (top  < 8) top  = rect.bottom + 8;
+
+  popover.style.left = left + 'px';
+  popover.style.top  = top  + 'px';
+  popover.classList.add('open');
+}
+
+function closeChipEditor() {
+  $('chip-edit-popover').classList.remove('open');
+  _editIndex = null;
+}
+
+function setupChipInteraction(chip, index) {
+  let pressTimer = null, startX = 0, startY = 0;
+
+  chip.addEventListener('pointerdown', e => {
+    startX = e.clientX; startY = e.clientY;
+    chip.classList.add('pressing');
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      chip.classList.remove('pressing');
+      openChipEditor(chip, index);
+    }, 500);
+  });
+
+  chip.addEventListener('pointermove', e => {
+    if (!pressTimer) return;
+    if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
+      clearTimeout(pressTimer); pressTimer = null;
+      chip.classList.remove('pressing');
+    }
+  });
+
+  chip.addEventListener('pointerup', () => {
+    if (pressTimer) {
+      clearTimeout(pressTimer); pressTimer = null;
+      chip.classList.remove('pressing');
+      applyPreset(index);
+    }
+  });
+
+  chip.addEventListener('pointercancel', () => {
+    clearTimeout(pressTimer); pressTimer = null;
+    chip.classList.remove('pressing');
+  });
+}
+
+/* ── INTERVAL CONTROL RENDERER ───────────────────────────── */
+function renderIntervalControl(containerEl) {
+  const chipsRow = document.createElement('div');
+  chipsRow.className = 'preset-chips';
+
+  const chipEls = presets.map((_, i) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'preset-chip';
+    setupChipInteraction(chip, i);
+    chipsRow.appendChild(chip);
+    return chip;
+  });
+
+  const tuneRow = document.createElement('div');
+  tuneRow.className = 'interval-row';
+
+  const btnDown = document.createElement('button');
+  btnDown.type = 'button'; btnDown.className = 'interval-btn'; btnDown.textContent = '−';
+
+  const display = document.createElement('div');
+  display.className = 'interval-val';
+
+  const btnUp = document.createElement('button');
+  btnUp.type = 'button'; btnUp.className = 'interval-btn'; btnUp.textContent = '+';
+
+  tuneRow.append(btnDown, display, btnUp);
+  containerEl.append(chipsRow, tuneRow);
+
+  function syncChips() {
+    chipEls.forEach((chip, i) => {
+      chip.textContent = fmtInterval(presets[i]);
+      chip.classList.toggle('active', presets[i] === state.intervalSec);
+    });
+  }
+  function updateDisplay() { display.textContent = fmtInterval(state.intervalSec); }
+
+  btnDown.addEventListener('click', () => {
+    state.intervalSec = Math.max(CONFIG.minIntervalSec, state.intervalSec - CONFIG.intervalStepSec);
+    syncAllIntervalControls();
+    if (state.slides.length) scheduleNext();
+  });
+  btnUp.addEventListener('click', () => {
+    state.intervalSec = Math.min(CONFIG.maxIntervalSec, state.intervalSec + CONFIG.intervalStepSec);
+    syncAllIntervalControls();
+    if (state.slides.length) scheduleNext();
+  });
+
+  const ctrl = { syncChips, updateDisplay };
+  _intervalControls.push(ctrl);
+  syncChips();
+  updateDisplay();
+  return ctrl;
 }
 
 /* ── AUTH ───────────────────────────────────────────────────── */
@@ -532,7 +849,7 @@ async function getListId() {
   return state.listId;
 }
 
-async function fetchItems(category) {
+async function fetchItems(category, applySort = true) {
   const siteId = await getSiteId();
   const listId = await getListId();
 
@@ -540,6 +857,10 @@ async function fetchItems(category) {
 
   if (category && category !== "__ALL__") {
     url += `&$filter=fields/${CONFIG.categoryColumn} eq '${category.replace(/'/g, "''")}'`;
+  }
+
+  if (applySort && state.orderMode === 'sorted') {
+    url += `&$orderby=fields/${CONFIG.sortColumn1} desc,fields/${CONFIG.sortColumn2} asc`;
   }
 
   const all = [];
@@ -573,7 +894,7 @@ function parseImageUrl(raw) {
 async function loadCategories() {
   showLoading("Fetching categories…");
   try {
-    const items = await fetchItems("__ALL__");
+    const items = await fetchItems("__ALL__", false);
     const cats = [...new Set(
       items.map(i => i.fields?.[CONFIG.categoryColumn]).filter(Boolean)
     )].sort();
@@ -620,6 +941,8 @@ async function startSlideshow(category) {
         imageUrl: parseImageUrl(i.fields?.[CONFIG.imageColumn]),
         title:    i.fields?.[CONFIG.titleColumn] || '',
         category: i.fields?.[CONFIG.categoryColumn] || '',
+        date:     i.fields?.[CONFIG.sortColumn1]   || '',
+        slideNum: i.fields?.[CONFIG.sortColumn2]   || 0,
       }))
       .filter(s => s.imageUrl);
 
@@ -632,11 +955,7 @@ async function startSlideshow(category) {
       return;
     }
 
-    // Shuffle
-    for (let i = slides.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [slides[i], slides[j]] = [slides[j], slides[i]];
-    }
+    if (state.orderMode === 'random') shuffleSlides(slides);
 
     state.slides = slides;
     state.currentIndex = 0;
@@ -652,7 +971,10 @@ async function startSlideshow(category) {
     const label = category === "__ALL__" ? "All images" : category;
     $('hud-cat-badge').textContent = label;
   } catch(e) {
-    toast("Error loading images: " + e.message, true);
+    const msg = (e.message || '').toLowerCase().includes('orderby')
+      ? "Sort columns not found — check CONFIG"
+      : "Error loading images: " + e.message;
+    toast(msg, true);
     hideLoading();
   }
 }
@@ -730,27 +1052,35 @@ function togglePause() {
   }
 }
 
+/* ── POPOVER EVENTS ──────────────────────────────────────────── */
+$('popover-cancel').addEventListener('click', closeChipEditor);
+$('popover-save').addEventListener('click', () => {
+  if (_editIndex === null) return;
+  const rawVal = parseInt($('popover-val').value, 10);
+  const unit   = parseInt($('popover-unit').value, 10);
+  if (!rawVal || rawVal < 1) return;
+  presets[_editIndex] = Math.max(CONFIG.minIntervalSec, Math.min(CONFIG.maxIntervalSec, rawVal * unit));
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  syncAllIntervalControls();
+  closeChipEditor();
+});
+document.addEventListener('pointerdown', e => {
+  if (_editIndex !== null && !$('chip-edit-popover').contains(e.target)) closeChipEditor();
+});
+
+/* ── RENDER INTERVAL CONTROLS ────────────────────────────────── */
+renderIntervalControl($('login-interval-control'));
+renderIntervalControl($('settings-interval-control'));
+
+/* ── ORDER TOGGLE ────────────────────────────────────────────── */
+$('order-toggle').addEventListener('click', e => {
+  const btn = e.target.closest('.order-btn');
+  if (!btn || btn.dataset.order === state.orderMode) return;
+  setOrderMode(btn.dataset.order);
+});
+updateOrderToggleUI();
+
 /* ── EVENT WIRING ────────────────────────────────────────────── */
-// Interval controls (login screen)
-$('interval-down').addEventListener('click', () => {
-  state.intervalSec = Math.max(CONFIG.minIntervalSec, state.intervalSec - CONFIG.intervalStepSec);
-  updateIntervalDisplays();
-});
-$('interval-up').addEventListener('click', () => {
-  state.intervalSec = Math.min(CONFIG.maxIntervalSec, state.intervalSec + CONFIG.intervalStepSec);
-  updateIntervalDisplays();
-});
-
-// Interval controls (settings)
-$('s-interval-down').addEventListener('click', () => {
-  state.intervalSec = Math.max(CONFIG.minIntervalSec, state.intervalSec - CONFIG.intervalStepSec);
-  updateIntervalDisplays(); scheduleNext();
-});
-$('s-interval-up').addEventListener('click', () => {
-  state.intervalSec = Math.min(CONFIG.maxIntervalSec, state.intervalSec + CONFIG.intervalStepSec);
-  updateIntervalDisplays(); scheduleNext();
-});
-
 // Login
 $('btn-login').addEventListener('click', async () => {
   $('login-status').textContent = '';
@@ -825,7 +1155,7 @@ $('btn-logout').addEventListener('click', () => {
   } else {
     show('login');
   }
-  updateIntervalDisplays();
+  syncAllIntervalControls();
 })();
 </script>
 </body>
