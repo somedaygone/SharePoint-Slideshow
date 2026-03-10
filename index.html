@@ -810,8 +810,7 @@ async function getToken() {
     const res = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: accounts[0] });
     return res.accessToken;
   } catch {
-    const res = await msalInstance.acquireTokenPopup({ scopes: SCOPES });
-    return res.accessToken;
+    await msalInstance.acquireTokenRedirect({ scopes: SCOPES });
   }
 }
 
@@ -1088,7 +1087,7 @@ $('btn-login').addEventListener('click', async () => {
   $('login-status').textContent = '';
   $('login-status').classList.remove('error');
   try {
-    await msalInstance.loginPopup({ scopes: SCOPES });
+    await msalInstance.loginRedirect({ scopes: SCOPES });
     hide('login'); show('category');
     await loadCategories();
   } catch(e) {
@@ -1134,7 +1133,7 @@ $('btn-refresh').addEventListener('click', async () => {
 });
 $('btn-logout').addEventListener('click', () => {
   const accounts = msalInstance.getAllAccounts();
-  if (accounts.length) msalInstance.logoutPopup({ account: accounts[0] });
+  if (accounts.length) msalInstance.logoutRedirect({ account: accounts[0] });
   hide('slide'); show('login');
   $('settings-panel').classList.remove('open');
   clearTimeout(state.timer);

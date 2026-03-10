@@ -108,6 +108,9 @@ Make sure the hosting URL is added as a **redirect URI** in the Azure AD app reg
 | Slide order (sorted/random) | `slideshow_order` | `sorted` |
 | Custom preset intervals | `slideshow_presets` | `[5, 10, 60, 300, 3600]` |
 
+## Mobile set up
+On my Amazon Fire tablet, I had to go into Settings > Site settings, and under Content, set Pop-ups and redirects to Allowed.
+
 # Setup Guide
 
 ## Prerequisites
