@@ -444,6 +444,13 @@ const CONFIG = {
 <!-- TOAST -->
 <div id="toast" id="toast"></div>
 
+<!-- DEBUG LOG (tap to toggle, visible on tablet) -->
+<div id="dbg-log" style="
+  display:none; position:fixed; bottom:0; left:0; right:0; max-height:40vh;
+  overflow-y:auto; background:rgba(0,0,0,.88); color:#0f0; font:11px/1.4 monospace;
+  padding:8px; z-index:99999; word-break:break-all;
+"></div>
+
 <!-- CHIP EDIT POPOVER -->
 <div id="chip-edit-popover">
   <div class="popover-row">
@@ -572,7 +579,8 @@ const ORDER_KEY = 'slideshow_order';
 
 const state = {
   intervalSec:    CONFIG.defaultIntervalSec,
-  slides:         [],  // { imageUrl, title, category, date, slideNum }
+  slides:         [],  // { imageUrl, title, category, date, slideNum, blobUrl }
+  consecutiveFails: 0,
   currentIndex:   0,
   paused:         false,
   hudVisible:     false,
@@ -583,6 +591,10 @@ const state = {
   timer:          null,
   progressTimer:  null,
 };
+
+// Catch-all: surface unhandled errors on screen
+window.addEventListener('error', e => dbg('UNCAUGHT:', e.message, e.filename?.split('/').pop() + ':' + e.lineno));
+window.addEventListener('unhandledrejection', e => dbg('UNHANDLED:', e.reason?.message || e.reason));
 
 /* ── UTILITIES ──────────────────────────────────────────────── */
 const $  = id => document.getElementById(id);
@@ -603,6 +615,29 @@ function toast(msg, isError=false) {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// On-screen debug log — enable by adding ?debug to URL or triple-tap screen
+const _dbgOn = new URLSearchParams(location.search).has('debug');
+const _dbgEl = document.getElementById('dbg-log');
+if (_dbgOn) _dbgEl.style.display = 'block';
+let _tapCount = 0, _tapTimer;
+document.addEventListener('click', () => {
+  _tapCount++;
+  clearTimeout(_tapTimer);
+  _tapTimer = setTimeout(() => { _tapCount = 0; }, 600);
+  if (_tapCount >= 3) {
+    _tapCount = 0;
+    _dbgEl.style.display = _dbgEl.style.display === 'none' ? 'block' : 'none';
+  }
+});
+function dbg(...args) {
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  console.log('[DBG]', ...args);
+  const line = document.createElement('div');
+  line.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+  _dbgEl.appendChild(line);
+  _dbgEl.scrollTop = _dbgEl.scrollHeight;
 }
 
 function fmtInterval(s) {
@@ -805,11 +840,13 @@ function renderIntervalControl(containerEl) {
 /* ── AUTH ───────────────────────────────────────────────────── */
 async function getToken() {
   const accounts = msalInstance.getAllAccounts();
-  if (!accounts.length) throw new Error("Not signed in");
+  if (!accounts.length) { dbg('ERR getToken: not signed in'); throw new Error("Not signed in"); }
   try {
     const res = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: accounts[0] });
+    dbg('Token acquired silently, expires:', res.expiresOn);
     return res.accessToken;
-  } catch {
+  } catch (e) {
+    dbg('Silent token failed, redirecting:', e.message);
     await msalInstance.acquireTokenRedirect({ scopes: SCOPES });
   }
 }
@@ -892,12 +929,29 @@ function parseImageUrl(raw) {
 }
 
 /* ── BLOB IMAGE FETCHING ─────────────────────────────────────── */
+// Use the Graph Shares API to resolve any SharePoint file URL directly,
+// without needing to discover the drive ID.
+function encodeShareUrl(url) {
+  // Ensure URL is properly percent-encoded (spaces → %20)
+  const encoded = url.replace(/ /g, '%20');
+  const base64 = btoa(encoded)
+    .replace(/=/g, '')
+    .replace(/\//g, '_')
+    .replace(/\+/g, '-');
+  return 'u!' + base64;
+}
+
 async function fetchImageAsBlob(sharePointUrl) {
+  const shareToken = encodeShareUrl(sharePointUrl);
+  const graphUrl = `https://graph.microsoft.com/v1.0/shares/${shareToken}/driveItem/content`;
+
   const token = await getToken();
-  const response = await fetch(sharePointUrl, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!response.ok) throw new Error(`Image fetch failed: ${response.status}`);
+  const response = await fetch(graphUrl, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    dbg('ERR image fetch', response.status, sharePointUrl.split('/').pop(), body.slice(0, 200));
+    throw new Error(`Image fetch failed: ${response.status}`);
+  }
   const blob = await response.blob();
   return URL.createObjectURL(blob);
 }
@@ -981,6 +1035,7 @@ async function startSlideshow(category) {
     state.slides = slides;
     state.currentIndex = 0;
     state.paused = false;
+    state.consecutiveFails = 0;
 
     hide('login'); hide('category');
     show('slide');
@@ -1012,7 +1067,11 @@ function renderSlide(idx) {
     if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     img.src = blobUrl;
     bg.style.backgroundImage = `url('${blobUrl}')`;
-    img.onload = () => { img.classList.add('visible'); prefetchNext(idx); };
+    img.onload = () => {
+      state.consecutiveFails = 0;
+      img.classList.add('visible');
+      prefetchNext(idx);
+    };
     img.onerror = () => { img.src = ''; goNext(); };
   };
 
@@ -1022,7 +1081,15 @@ function renderSlide(idx) {
     } else {
       fetchImageAsBlob(s.imageUrl)
         .then(blobUrl => { s.blobUrl = blobUrl; applyBlob(blobUrl); })
-        .catch(() => goNext());
+        .catch(() => {
+          state.consecutiveFails++;
+          if (state.consecutiveFails >= state.slides.length) {
+            state.consecutiveFails = 0;
+            toast("Could not load any images. Check console for details.", true);
+            return;
+          }
+          goNext();
+        });
     }
   }, 200);
 
@@ -1174,18 +1241,23 @@ $('btn-logout').addEventListener('click', () => {
 /* ── HANDLE REDIRECT / SILENT SSO ───────────────────────────── */
 (async () => {
   showLoading("Starting…");
+  dbg('MSAL initializing…');
   await msalInstance.initialize();
   try {
-    await msalInstance.handleRedirectPromise();
-  } catch {}
+    const resp = await msalInstance.handleRedirectPromise();
+    dbg('Redirect result:', resp ? 'token received' : 'no redirect');
+  } catch (e) {
+    dbg('ERR handleRedirectPromise:', e.message);
+  }
 
   const accounts = msalInstance.getAllAccounts();
+  dbg('Accounts:', accounts.length, accounts.map(a => a.username));
   hideLoading();
   if (accounts.length) {
-    // Already signed in from a previous session
     hide('login'); show('category');
     await loadCategories();
   } else {
+    dbg('No accounts — showing login');
     show('login');
   }
   syncAllIntervalControls();
