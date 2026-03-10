@@ -891,6 +891,26 @@ function parseImageUrl(raw) {
   return null;
 }
 
+/* ── BLOB IMAGE FETCHING ─────────────────────────────────────── */
+async function fetchImageAsBlob(sharePointUrl) {
+  const token = await getToken();
+  const response = await fetch(sharePointUrl, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) throw new Error(`Image fetch failed: ${response.status}`);
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+function prefetchNext(currentIdx) {
+  const nextIdx = (currentIdx + 1) % state.slides.length;
+  const next = state.slides[nextIdx];
+  if (!next || next.blobUrl) return;
+  fetchImageAsBlob(next.imageUrl)
+    .then(url => { next.blobUrl = url; })
+    .catch(() => {});
+}
+
 /* ── CATEGORIES ─────────────────────────────────────────────── */
 async function loadCategories() {
   showLoading("Fetching categories…");
@@ -987,11 +1007,23 @@ function renderSlide(idx) {
   if (!s) return;
 
   img.classList.remove('visible');
-  setTimeout(() => {
-    img.src = s.imageUrl;
-    bg.style.backgroundImage = `url('${s.imageUrl}')`;
-    img.onload = () => img.classList.add('visible');
+
+  const applyBlob = (blobUrl) => {
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    img.src = blobUrl;
+    bg.style.backgroundImage = `url('${blobUrl}')`;
+    img.onload = () => { img.classList.add('visible'); prefetchNext(idx); };
     img.onerror = () => { img.src = ''; goNext(); };
+  };
+
+  setTimeout(() => {
+    if (s.blobUrl) {
+      applyBlob(s.blobUrl);
+    } else {
+      fetchImageAsBlob(s.imageUrl)
+        .then(blobUrl => { s.blobUrl = blobUrl; applyBlob(blobUrl); })
+        .catch(() => goNext());
+    }
   }, 200);
 
   $('hud-title').textContent   = s.title;
