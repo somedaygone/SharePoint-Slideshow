@@ -1064,7 +1064,6 @@ function renderSlide(idx) {
   img.classList.remove('visible');
 
   const applyBlob = (blobUrl) => {
-    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     img.src = blobUrl;
     bg.style.backgroundImage = `url('${blobUrl}')`;
     img.onload = () => {
