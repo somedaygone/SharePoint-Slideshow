@@ -22,7 +22,8 @@ This project was built with the assistance of [Claude](https://claude.ai) by Ant
 - Configurable slide interval with quick-select preset chips (long-press a chip to customize it)
 - Fine-tune interval with +/− buttons (adjusts in configurable steps)
 - HUD overlay (tap to show/hide) with previous, next, pause, and settings controls
-- Settings panel to change interval, order, category, refresh images, or sign out
+- Settings panel to change interval, order, progress bar visibility, category, refresh images, or sign out
+- Progress bar toggle (on/off) persisted in localStorage
 - Smooth fade transitions and blurred ambient background
 
 ## Prerequisites
@@ -107,6 +108,7 @@ Make sure the hosting URL is added as a **redirect URI** in the Azure AD app reg
 |---------|-------------|---------|
 | Slide order (sorted/random) | `slideshow_order` | `sorted` |
 | Custom preset intervals | `slideshow_presets` | `[5, 10, 60, 300, 3600]` |
+| Progress bar visible | `slideshow_progress` | `true` |
 
 ## Mobile set up
 On my Amazon Fire tablet, I had to go into Settings > Site settings, and under Content, set Pop-ups and redirects to Allowed.

@@ -4,6 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a0a">
 <title>Slideshow</title>
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400&display=swap" rel="stylesheet">
@@ -379,6 +380,26 @@
   #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
   #toast.error { border-color: var(--danger); color: #e07070; }
 
+  /* ── TOGGLE SWITCH ────────────────────────────────────────── */
+  .toggle-switch {
+    position: relative; width: 42px; height: 24px; flex-shrink: 0;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: absolute; inset: 0; border-radius: 100px;
+    background: var(--border); cursor: pointer;
+    transition: background .2s;
+  }
+  .toggle-track::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--muted); transition: transform .2s, background .2s;
+  }
+  .toggle-switch input:checked + .toggle-track { background: rgba(201,169,110,.3); }
+  .toggle-switch input:checked + .toggle-track::after {
+    transform: translateX(18px); background: var(--gold);
+  }
+
   /* ── ORDER TOGGLE ─────────────────────────────────────────── */
   .order-toggle {
     display: flex;
@@ -539,6 +560,14 @@ const CONFIG = {
     </div>
 
     <div class="settings-row">
+      <span class="settings-label">Progress bar</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-progress">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
       <span class="settings-label">Category</span>
       <div class="settings-actions">
         <button class="btn-secondary" id="btn-change-cat">Change…</button>
@@ -575,7 +604,8 @@ const msalInstance = new msal.PublicClientApplication(msalConfig);
 const SCOPES = ["https://graph.microsoft.com/Sites.Read.All"];
 
 /* ── STATE ──────────────────────────────────────────────────── */
-const ORDER_KEY = 'slideshow_order';
+const ORDER_KEY    = 'slideshow_order';
+const PROGRESS_KEY = 'slideshow_progress';
 
 const state = {
   intervalSec:    CONFIG.defaultIntervalSec,
@@ -586,6 +616,7 @@ const state = {
   hudVisible:     false,
   selectedCat:    "__ALL__",
   orderMode:      localStorage.getItem(ORDER_KEY) || 'sorted',
+  showProgress:   localStorage.getItem(PROGRESS_KEY) !== 'false',
   siteId:         null,
   listId:         null,
   timer:          null,
@@ -1178,6 +1209,18 @@ $('order-toggle').addEventListener('click', e => {
   setOrderMode(btn.dataset.order);
 });
 updateOrderToggleUI();
+
+/* ── PROGRESS TOGGLE ─────────────────────────────────────────── */
+function applyProgressVisibility() {
+  $('progress-bar-wrap').style.display = state.showProgress ? '' : 'none';
+}
+$('toggle-progress').checked = state.showProgress;
+applyProgressVisibility();
+$('toggle-progress').addEventListener('change', () => {
+  state.showProgress = $('toggle-progress').checked;
+  localStorage.setItem(PROGRESS_KEY, state.showProgress);
+  applyProgressVisibility();
+});
 
 /* ── EVENT WIRING ────────────────────────────────────────────── */
 // Login
